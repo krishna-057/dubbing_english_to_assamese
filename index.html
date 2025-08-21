@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Video Translator</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 2rem;
+        background-color: #f9f9f9;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+      .container {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        border-radius: 8px;
+        padding: 2rem;
+        background-color: white;
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+      #drop-area {
+        border: 3px dashed #ccc;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        color: #999;
+        cursor: pointer;
+        margin-bottom: 1rem;
+        background-color: #f7f7f7;
+        transition: all 0.3s ease;
+      }
+      #drop-area.dragover {
+        border-color: #007bff;
+        color: #007bff;
+        background-color: #e6f2ff;
+      }
+      #fileElem {
+        display: none;
+      }
+      .button-container {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+      }
+      button {
+        padding: 0.8rem 1.5rem;
+        font-size: 1rem;
+        border: none;
+        border-radius: 5px;
+        background-color: #007bff;
+        color: white;
+        cursor: pointer;
+        margin-top: 1rem;
+        transition: all 0.2s ease;
+      }
+      button:hover {
+        background-color: #0069d9;
+      }
+      button:disabled {
+        background-color: #aaa;
+        cursor: not-allowed;
+      }
+      #progress {
+        margin-top: 1.5rem;
+        display: none;
+        text-align: center;
+      }
+      .loader {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(0, 123, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #007bff;
+        animation: spin 1s ease-in-out infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      #download-container {
+        margin-top: 1.5rem;
+        text-align: center;
+        display: none;
+      }
+      #download-link {
+        display: inline-block;
+        padding: 0.8rem 1.5rem;
+        background-color: #28a745;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        transition: all 0.2s ease;
+      }
+      #download-link:hover {
+        background-color: #218838;
+      }
+      #status-message {
+        margin-top: 1rem;
+        text-align: center;
+        color: #6c757d;
+      }
+      #language-selector {
+        margin-top: 1rem;
+        padding: 0.5rem;
+        width: 100%;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+      }
+      .file-info {
+        margin-top: 1rem;
+        padding: 0.5rem;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+        text-align: center;
+      }
+      footer {
+        margin-top: 2rem;
+        text-align: center;
+        color: #6c757d;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Video Translator</h1>
+
+      <div id="drop-area">
+        <p>
+          Drag & drop a video file here, or
+          <label for="fileElem" style="color: #007bff; cursor: pointer">browse</label>
+        </p>
+        <input type="file" id="fileElem" accept="video/*" />
+        <p id="file-name"></p>
+      </div>
+      
+      <div class="file-info" id="file-info" style="display: none;">
+        <p id="file-details"></p>
+      </div>
+
+      <label for="language-selector">Select target language:</label>
+      <select id="language-selector">
+        <option value="asm_Beng">Assamese (অসমীয়া)</option>
+        
+      </select>
+
+      <div class="button-container">
+        <button id="translate-btn" disabled>Translate Video</button>
+      </div>
+
+      <div id="progress">
+        <p>Translating your video... This may take several minutes.</p>
+        <div class="loader"></div>
+        <p id="status-message">Transcribing audio...</p>
+      </div>
+
+      <div id="download-container">
+        <p>Translation complete! Your video is ready to download.</p>
+        <a id="download-link" href="#" download="translated_video.mp4">Download Translated Video</a>
+      </div>
+    </div>
+
+    <footer>
+      <p>Video Translator powered by AI. Converts English videos to various Indian languages.</p>
+    </footer>
+
+    <script>
+      // API endpoint for video translation
+
+      // ==================================================================
+      const API_URL = 'https://8b17-35-237-158-160.ngrok-free.app'                            //Replace with your API URL
+      // ==================================================================
+
+
+      const dropArea = document.getElementById("drop-area");
+      const fileElem = document.getElementById("fileElem");
+      const fileNameDisplay = document.getElementById("file-name");
+      const fileInfo = document.getElementById("file-info");
+      const fileDetails = document.getElementById("file-details");
+      const translateBtn = document.getElementById("translate-btn");
+      const progressDiv = document.getElementById("progress");
+      const statusMessage = document.getElementById("status-message");
+      const downloadContainer = document.getElementById("download-container");
+      const downloadLink = document.getElementById("download-link");
+      const languageSelector = document.getElementById("language-selector");
+
+      let selectedFile = null;
+
+      // Prevent default drag behaviors
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+      });
+
+      function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+
+      // Highlight drop area when item is dragged over it
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropArea.addEventListener(
+          eventName,
+          () => dropArea.classList.add("dragover"),
+          false
+        );
+      });
+
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropArea.addEventListener(
+          eventName,
+          () => dropArea.classList.remove("dragover"),
+          false
+        );
+      });
+
+      // Handle dropped files
+      dropArea.addEventListener("drop", handleDrop, false);
+      fileElem.addEventListener("change", handleFiles, false);
+
+      function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles({ target: { files } });
+      }
+
+      function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+
+      function handleFiles(e) {
+        if (e.target.files.length > 0) {
+          selectedFile = e.target.files[0];
+          fileNameDisplay.textContent = `Selected: ${selectedFile.name}`;
+          
+          // Show file details
+          fileInfo.style.display = "block";
+          fileDetails.textContent = `Size: ${formatFileSize(selectedFile.size)} | Type: ${selectedFile.type}`;
+          
+          translateBtn.disabled = false;
+          downloadContainer.style.display = "none";
+        }
+      }
+
+      translateBtn.addEventListener("click", () => {
+        if (!selectedFile) return;
+        translateBtn.disabled = true;
+        progressDiv.style.display = "block";
+        downloadContainer.style.display = "none";
+        
+        // Update status message
+        statusMessage.textContent = "Uploading video...";
+
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+        formData.append("target_language", languageSelector.value);
+
+        // A='https://ad45-34-81-59-54.ngrok-free.app'
+        // console.log(API_URL);
+        // Send translation request to API
+        fetch(`${API_URL}/translate-video/`, {
+          method: "POST",
+          body: formData,
+        })
+          .then(response => {
+            if (response.ok) {
+              statusMessage.textContent = "Processing completed! Preparing download...";
+              return response.blob();
+            } else {
+              return response.json().then(errorData => {
+                throw new Error(errorData.error || "Translation failed");
+              });
+            }
+          })
+          .then(blob => {
+            // Create object URL for downloading
+            const url = window.URL.createObjectURL(blob);
+            downloadLink.href = url;
+            
+            // Set appropriate filename based on language and original file
+            const langCode = languageSelector.value.split('_')[0];
+            const originalName = selectedFile.name.replace(/\.[^/.]+$/, "");
+            downloadLink.download = `${originalName}_${langCode}.mp4`;
+            
+            // Show download button
+            progressDiv.style.display = "none";
+            downloadContainer.style.display = "block";
+            
+            // Reset form for new translation
+            fileNameDisplay.textContent = "";
+            fileInfo.style.display = "none";
+            translateBtn.disabled = false;
+          })
+          .catch(err => {
+            progressDiv.style.display = "none";
+            alert("Error: " + err.message);
+            translateBtn.disabled = false;
+          });
+      });
+
+    </script>
+  </body>
+</html>
